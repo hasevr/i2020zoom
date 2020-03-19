@@ -1,6 +1,7 @@
 <?php 
 include("csvdb.inc");
-$csv = loadCsv("$dataFolder/presens.csv");		//	発表者一覧のロード
+$csv = loadCsv("$dataFolder/presens.csv");		//	審査員一覧のロード
+$C = getKeyMap($csv);
 
 //	以下、Webページを表示しながら処理する。
 ?>
@@ -26,10 +27,8 @@ $csv = loadCsv("$dataFolder/presens.csv");		//	発表者一覧のロード
 	<br>
 </form>
 <?php
-if (@$_POST["passwd"]!="パスワードをここに書く") exit();
-$emailPos = getPosFromKey("email", $csv);
+if (@$_POST["passwd"]!="1Bridge2Online") exit();
 if (isset($_POST["send"])||isset($_POST["check"])){
-	$oidPos = getPosFromKey("oid", $csv);
 	foreach($csv as $rn => $r){
 		if ($rn == 0){
 			$org=array('$cid');
@@ -38,11 +37,11 @@ if (isset($_POST["send"])||isset($_POST["check"])){
 			}
 			continue;
 		}
-		$rep=array(getCid($r[$oidPos]));
+		$rep=array(getCid($r[$C["oid"]]));
 		foreach($r as $v){
 			$rep[] = $v;
 		}
-		$to = $r[$emailPos];
+		$to = $r[$C["email"]];
 		$from = $_POST["from"];
 		$title = str_replace($org, $rep, $_POST["title"]);
 		$body = str_replace($org, $rep, $_POST["body"]);

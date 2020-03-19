@@ -1,93 +1,59 @@
 <?php
-//	ÀßÄê
+//	è¨­å®š
 require("csvdbconf.inc");
 
-//	mbstring¤ÎÀßÄê
+//	mbstringã®è¨­å®š
 mb_language("ja");
 mb_internal_encoding("UTF-8");
 mb_regex_encoding("UTF-8");
 setlocale(LC_ALL, 'ja_JP.UTF-8');
 
-//	dataFolderºîÀ®
+//	dataFolderä½œæˆ
 if (!file_exists($dataFolder)){
 	mkdir($dataFolder, "0700");
 	file_put_contents("$dataFolder/.htaccess", "deny from all\n");
 }
 
-//-----------------------------------------------------------------------------
-//	´Ø¿ôÄêµÁÉô¡£
-  /**
-     * ¥Õ¥¡¥¤¥ë¥İ¥¤¥ó¥¿¤«¤é¹Ô¤ò¼èÆÀ¤·¡¢CSV¥Õ¥£¡¼¥ë¥É¤ò½èÍı¤¹¤ë
-     * @param resource handle
-     * @param int length
-     * @param string delimiter
-     * @param string enclosure
-     * @return ¥Õ¥¡¥¤¥ë¤Î½ªÃ¼¤ËÃ£¤·¤¿¾ì¹ç¤ò´Ş¤ß¡¢¥¨¥é¡¼»ş¤ËFALSE¤òÊÖ¤·¤Ş¤¹¡£
-     */
-function fgetcsv_reg (&$handle, $length = null, $d = ',', $e = '"') {
-    $d = preg_quote($d);
-    $e = preg_quote($e);
-    $_line = "";
-    $eof = false;
-    while (($eof != true)and(!feof($handle))) {
-        $_line .= (empty($length) ? fgets($handle) : fgets($handle, $length));
-        $itemcnt = preg_match_all('/'.$e.'/', $_line, $dummy);
-        if ($itemcnt % 2 == 0) $eof = true;
-    }
-    $_csv_line = preg_replace('/(?:\\r\\n|[\\r\\n])?$/', $d, trim($_line));
-    $_csv_pattern = '/('.$e.'[^'.$e.']*(?:'.$e.$e.'[^'.$e.']*)*'.$e.'|[^'.$d.']*)'.$d.'/';
-    preg_match_all($_csv_pattern, $_csv_line, $_csv_matches);
-    $_csv_data = $_csv_matches[1];
-    for($_csv_i=0;$_csv_i<count($_csv_data);$_csv_i++){
-        $_csv_data[$_csv_i]=preg_replace('/^'.$e.'(.*)'.$e.'$/s','$1',$_csv_data[$_csv_i]);
-        $_csv_data[$_csv_i]=str_replace($e.$e, $e, $_csv_data[$_csv_i]);
-    }
-    return empty($_line) ? false : $_csv_data;
-}
-
-//	SJIS¤«BOMÉÕ¤­UTF-8¤ÎCsv¤ò¥í¡¼¥É¤¹¤ë¡£UTF-8¤ËÊÑ´¹¤·¤Æ2¼¡¸µÇÛÎó¤Ë¤·¤ÆÊÖ¤¹¡£
+//	SJISã‹BOMä»˜ãUTF-8ã®Csvã‚’ãƒ­ãƒ¼ãƒ‰ã™ã‚‹ã€‚UTF-8ã«å¤‰æ›ã—ã¦2æ¬¡å…ƒé…åˆ—ã«ã—ã¦è¿”ã™ã€‚
 function loadCsv($fname){
 	$sjis = @file_get_contents($fname);
+	$localeOrg = setlocale(LC_ALL, 0);
+	setlocale(LC_ALL, "ja_JP.UTF-8");
 	if (substr($sjis, 0,3) == "\xEF\xBB\xBF"){
 		//	utf8 with bom
 		$fp = fopen($fname, "r");
 		fgetc($fp); fgetc($fp); fgetc($fp);	//	bom
-		while ($data = fgetcsv_reg($fp)) {
+		while ($data = fgetcsv($fp, 0, ',', '"', "\0")) {
 			$csv[] = $data;
 		}
 	}else{
-		$buf = mb_convert_encoding($sjis, "UTF-8", "sjis");
+		$buf = mb_convert_encoding($sjis, "UTF-8", "sjis-win");
 		$fp = tmpfile();
 		fwrite($fp, $buf);
 		rewind($fp);
 		$csv=null;
-		while ($data = fgetcsv_reg($fp)) {
+		while ($data = fgetcsv($fp, 0, ',', '"', '')) {
 			$csv[] = $data;
 		}
 	}
+	setlocale(LC_ALL, $localeOrg);
 	return $csv;
 }
 
-//	2¼¡¸µÇÛÎó¤òUTF-8BOMÉÕ¤­¤ÎCsv¤Ë¥»¡¼¥Ö¤¹¤ë¡£
+//	2æ¬¡å…ƒé…åˆ—ã‚’UTF-8BOMä»˜ãã®Csvã«ã‚»ãƒ¼ãƒ–ã™ã‚‹ã€‚
 function saveCsv($fname, $csv){
+	$localeOrg = setlocale(LC_ALL, 0);
+	setlocale(LC_ALL, "ja_JP.UTF-8");
+
 	$fpSave = fopen($fname, "w");
 	fputs($fpSave, "\xEF\xBB\xBF");	//	BOM
-	foreach($csv as $r) fputcsv($fpSave, $r);
+	foreach($csv as $r) fputcsv($fpSave, $r, ',', '"', "\0");
 	fclose($fpSave);
-/*
-	//	¤Ş¤ºUTF-8¤ÇÊİÂ¸
-	$utf8name = "$fname".".save.utf8.csv";
-	$fpSave = fopen($utf8name, "w");
-	fputs($fpSave, "\xEF\xBB\xBF");	//	BOM
-	foreach($csv as $r) fputcsv($fpSave, $r);
-	fclose($fpSave);
-	//	SJIS¤ËÊÑ´¹¡£
-	$save = mb_convert_encoding(file_get_contents($utf8name), "SJIS", "UTF-8");
-	file_put_contents($fname, $save);
-*/
+
+	setlocale(LC_ALL, $localeOrg);
 }
 
-//	¥¢¥Ã¥×¥í¡¼¥É¤µ¤ì¤¿¥Õ¥¡¥¤¥ë¤òÊİ´É¤¹¤ë´Ø¿ô
+//	ã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰ã•ã‚ŒãŸãƒ•ã‚¡ã‚¤ãƒ«ã‚’ä¿ç®¡ã™ã‚‹é–¢æ•°
 function upload($type){
 	global $record, $dataFolder;
 	if (isset($_FILES[$type])){
@@ -107,44 +73,37 @@ function upload($type){
 	return false;
 }
 
-//	¡Ö¸½ºß¤Î¥Õ¥¡¥¤¥ë¡×¤È¤¤¤¦¥Õ¥¡¥¤¥ë¤Ø¤Î¥ê¥ó¥¯¤òÉ½¼¨¤¹¤ë´Ø¿ô¡£
-function linkToFile($type){
+//	ã€Œç¾åœ¨ã®ãƒ•ã‚¡ã‚¤ãƒ«ã€ã¨ã„ã†ãƒ•ã‚¡ã‚¤ãƒ«ã¸ã®ãƒªãƒ³ã‚¯ã‚’è¡¨ç¤ºã™ã‚‹é–¢æ•°ã€‚
+function linkToFile($type, $disp = 'ç¾åœ¨ã®ãƒ•ã‚¡ã‚¤ãƒ«'){
 	global $record, $dataFolder;
 	if (sizeof(glob("$dataFolder/".$record["oid"].$type.".*"))>0){
 		?>
-		<a href="<?php echo $_SERVER['REQUEST_URI']?>&file=<?php echo $type?>">¸½ºß¤Î¥Õ¥¡¥¤¥ë</a>
+		<a href="<?php echo $_SERVER['REQUEST_URI']?>&file=<?php echo $type?>">$disp</a>
 		<?php
 	}
 }
 
-//	ÇÛÎó¤ÎÃæ¿È¤òÉ½¼¨¤¹¤ë´Ø¿ô¡£¥Ç¥Ğ¥Ã¥°ÍÑ
-function printArray($a){
-	if (is_array($a)){
-		foreach($a as $k=>$v){
-			echo "$k ";
-			printArray($v);
-		}
-	}else{
-		echo " => $a<br>\n";
-	}
-}
-
-//	oid¤ËÂĞ±ş¤¹¤ëcid¤òÆÀ¤ë¡£
+//	oidã«å¯¾å¿œã™ã‚‹cidã‚’å¾—ã‚‹ã€‚
 function getCid($oid){
 	global $cidSalt;
-	return str_replace(".", "_", crypt($oid, $cidSalt));
+	return str_replace(array(".", "/"), array("_", "-"), crypt($oid, $cidSalt));
 }
-//	CSV¤Î°ì¹ÔÌÜ¤«¤éKey¤òÃµ¤·¤Æ¥«¥é¥à°ÌÃÖ¤òÊÖ¤¹¡£
-function getPosFromKey($key, $csv){
+
+//	CSVã®ä¸€è¡Œç›®ã‹ã‚‰Keyã‚’æ¢ã—ã¦ã‚«ãƒ©ãƒ ä½ç½®ã‚’è¿”ã™ã€‚
+function getColumnFromKey($key, $csv){
 	if(!is_array(@$csv[0])) return -1;
 	foreach($csv[0] as $k=>$v){
 		if($v==$key) return $k;
 	}
 	return -1;
 }
-//	cid¤ÈÅù¤·¤¤¥ì¥³¡¼¥É¤òÊÖ¤¹¡£
-function getRecord($cid, $csv){
-	$oidPos = getPosFromKey("oid", $csv);
+function getKeyMap($csv){
+	if(!is_array(@$csv[0])) return null;
+	return array_flip($csv[0]);
+}
+
+function getRowFromCid($cid, $csv){
+	$oidPos = getColumnFromKey("oid", $csv);
 	$record=NULL;
 	$row=-1;
 	if(!is_array(@$csv)) return NULL;
@@ -152,14 +111,34 @@ function getRecord($cid, $csv){
 		$c = getCid($r[$oidPos]);
 		if ($c == $cid){
 			if ($record){
-				//	oid¤¬°Û¤Ê¤Ã¤Æ¤âcid¤¬Æ±¤¸¤Ë¤Ê¤ë´í¸±À­¤¬¤Ê¤¤¤³¤È¤Ï¡¢checkcid.php¤Ç³ÎÇ§¤·¤Æ¤ª¤¯¡£
-				echo "Æ±°ì¤ÎID¤ò»ı¤Ä¥ì¥³¡¼¥É¤¬Ê£¿ôÂ¸ºß¤·¤Ş¤·¤¿¡£¼Â¹Ô°Ñ°÷¤Ë¤´Ï¢Íí¤¯¤À¤µ¤¤¡£<br>";
+				//	oidãŒç•°ãªã£ã¦ã‚‚cidãŒåŒã˜ã«ãªã‚‹å±é™ºæ€§ãŒãªã„ã“ã¨ã¯ã€checkcid.phpã§ç¢ºèªã—ã¦ãŠãã€‚
+				echo "åŒä¸€ã®IDã‚’æŒã¤ãƒ¬ã‚³ãƒ¼ãƒ‰ãŒè¤‡æ•°å­˜åœ¨ã—ã¾ã—ãŸã€‚å®Ÿè¡Œå§”å“¡ã«ã”é€£çµ¡ãã ã•ã„ã€‚<br>";
+				exit();
+			}
+			return $key;
+		}
+	}
+	return -1;
+}
+
+//	cidã¨ç­‰ã—ã„ãƒ¬ã‚³ãƒ¼ãƒ‰ã‚’è¿”ã™ã€‚
+function getRecordByCid($cid, $csv){
+	$oidPos = getColumnFromKey("oid", $csv);
+	$record=NULL;
+	$row=-1;
+	if(!is_array(@$csv)) return NULL;
+	foreach($csv as $key => $r){
+		$c = getCid($r[$oidPos]);
+		if ($c == $cid){
+			if ($record){
+				//	oidãŒç•°ãªã£ã¦ã‚‚cidãŒåŒã˜ã«ãªã‚‹å±é™ºæ€§ãŒãªã„ã“ã¨ã¯ã€checkcid.phpã§ç¢ºèªã—ã¦ãŠãã€‚
+				echo "åŒä¸€ã®IDã‚’æŒã¤ãƒ¬ã‚³ãƒ¼ãƒ‰ãŒè¤‡æ•°å­˜åœ¨ã—ã¾ã—ãŸã€‚å®Ÿè¡Œå§”å“¡ã«ã”é€£çµ¡ãã ã•ã„ã€‚<br>";
 				exit();
 			}
 			$record = $r;
 			$row = $key;
 		}
-		//	¼¡¤Î¥³¥á¥ó¥È¤ò²ò½ü¤¹¤ë¤È¡¢cid¤Î°ìÍ÷¤òÉ½¼¨¤·¤Ş¤¹¡£
+		//	æ¬¡ã®ã‚³ãƒ¡ãƒ³ãƒˆã‚’è§£é™¤ã™ã‚‹ã¨ã€cidã®ä¸€è¦§ã‚’è¡¨ç¤ºã—ã¾ã™ã€‚
 		//	echo $r[$oidPos]. " => $cid<br>\n";
 	}
 	if (!$record) return NULL;
@@ -170,6 +149,21 @@ function getRecord($cid, $csv){
 	$rv['row'] = $row;
 	return $rv;
 }
+
+//	$csvã¨ã€ã‚­ãƒ¼ã«å¤‰æ›ã—ãŸã‚‚ã®ã‚’è¿”ã™
+function getRecordByRow($row, $csv){
+	if (!is_numeric($row)) {
+		echo "Error in getRecord($csv, $row): $row is not a numeric value.<br>";
+		exit();
+	}
+	$rv = array();
+	foreach($csv[0] as $k => $v){
+		$rv[$v] = $csv[$row][$k];
+	}
+	$rv['row'] = $row;
+	return $rv;
+}
+
 function saveRecord(&$csv, $record){
 	$row = $record['row'];
 	foreach($csv[0] as $col => $key){
@@ -177,7 +171,8 @@ function saveRecord(&$csv, $record){
 		//	echo "csv[$row][$col] = ". $record[$key]. "<br>";
 	}
 }
-//	¥í¥Ã¥¯¡¦¥¢¥ó¥í¥Ã¥¯
+
+//	ãƒ­ãƒƒã‚¯ãƒ»ã‚¢ãƒ³ãƒ­ãƒƒã‚¯
 function lock(){
 	global $fpLock, $dataFolder;
 	$fpLock = @fopen("$dataFolder/lock.txt", "w");
@@ -187,14 +182,14 @@ function lock(){
 		usleep(100*1000);
 		$fpLock = @fopen("$dataFolder/lock.txt", "w");
 		$count ++;
-		if ($count++ > 50){	//	5ÉÃÂÔ¤Ä
+		if ($count++ > 50){	//	5ç§’å¾…ã¤
 			?>
 				<html>
 				<meta http-equiv="content-type" content="text/html; charset=EUC-JP">
 				<body>
-					¸½ºß¡¢¥µ¡¼¥Ğ¤¬º®»¨¤·¤Æ¤¤¤ë¤¿¤á¹¹¿·¤¬¤Ç¤­¤Ş¤»¤ó¡£<br>
-					¤·¤Ğ¤é¤¯¡Ê5ÉÃÄøÅÙ¡ËÂÔ¤Ã¤Æ¤«¤é¡¢
-					Web¥Ö¥é¥¦¥¶¤Î¡ÖºÆÆÉ¤ß¹ş¤ß¡×¤Ş¤¿¤Ï¡Ö¹¹¿·¡×¥Ü¥¿¥ó¤ò²¡¤·¤Æ¤ß¤Æ¤¯¤À¤µ¤¤¡£
+					ç¾åœ¨ã€ã‚µãƒ¼ãƒãŒæ··é›‘ã—ã¦ã„ã‚‹ãŸã‚æ›´æ–°ãŒã§ãã¾ã›ã‚“ã€‚<br>
+					ã—ã°ã‚‰ãï¼ˆ5ç§’ç¨‹åº¦ï¼‰å¾…ã£ã¦ã‹ã‚‰ã€
+					Webãƒ–ãƒ©ã‚¦ã‚¶ã®ã€Œå†èª­ã¿è¾¼ã¿ã€ã¾ãŸã¯ã€Œæ›´æ–°ã€ãƒœã‚¿ãƒ³ã‚’æŠ¼ã—ã¦ã¿ã¦ãã ã•ã„ã€‚
 				</body>
 				</html>
 			<?php
@@ -211,4 +206,23 @@ function unlock(){
 	}
 	$fpLock = NULL;
 }
+
+function checkCids($stop = 3000){
+	$cids = array();
+	$i;
+	for($i=0; $i<$stop; $i++){
+		$cid = getCid($i);
+		$pos = array_search($cid, $cids);
+		if($pos===FALSE){
+			$cids[] = $cid;
+		}else{
+			echo "$pos ã¨ $i ã§ cid ãŒç­‰ã—ã„å€¤($cid) ã«ãªã‚Šã¾ã™ã€‚<br>";
+			break;
+		}
+	}
+	if ($i==$stop){
+		echo "0ã‹ã‚‰ $stop ã¾ã§ã«ã¯ã€cidã®é‡è¤‡ã¯ã‚ã‚Šã¾ã›ã‚“ã€‚<br>";
+	}
+}
+
 ?>

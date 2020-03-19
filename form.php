@@ -7,35 +7,32 @@ if (!file_exists("run.txt")){
 }
 
 $presens = loadCsv("$dataFolder/presens.csv");		//	発表一覧
-$presen = getRecord($_GET["cid"], $presens);
+$presen = getRecordByCid($_GET["cid"], $presens);
 if (@count($presen) == 0){
-	echo "URLが不正です。<br>長谷川晶一 hasevr@gmail.com までご連絡ください。<br>";
+	echo "URLが不正です。<br>";
 	exit();
 }
 
 lock();	//	リンク先保存するため、linksはロックが必要
 $links = loadCsv("$dataFolder/links.csv");	//	リンク情報
-for($i=0; $i < 10; ++$i){
-	$dispPos[$i] = getPosFromKey("disp$i", $links);
-	$linkPos[$i] = getPosFromKey("link$i", $links);
-}
-$pidPos = getPosFromKey("pid", $links);
-$commentPos = getPosFromKey("comment", $links);
+$C = getKeyMap($links);
 
 //var_dump($presen);
 $pid = $presen["pid"];
 if (!$pid){
-	echo "発表IDが見つかりません。<br> 長谷川晶一 hasevr@gmail.com までご連絡ください。<br>";
+	echo "発表IDが見つかりません。<br>";
 }
+
+$pidCol = getColumnFromKey("pid", $links);
 for($row=0; $row < count($links); $row++){
-	if ($links[$row][$pidPos] == $pid) break;
+	if ($links[$row][$pidCol] == $pid) break;
 }
-if (@$links[$row][$pidPos] != $pid){
+if (@$links[$row][$pidCol] != $pid){
 	$link = array();
 	foreach($links[0] as $v){
 		array_push($link, "");
 	}
-	$link[$pidPos] = $pid;
+	$link[$pidCol] = $pid;
 	$links[] = $link;
 }
 $link = $links[$row];
@@ -47,14 +44,8 @@ if (@$_POST["update"]){
 	$update = true;
 	//var_dump($_POST);
 	foreach($_POST as $k => $v){
-		$i = substr($k, 4, 1);
-		if (substr($k, 0, 4) == "disp"){
-			$links[$row][$dispPos[$i]] = $v;
-		}else if (substr($k, 0, 4) == "link"){
-			$links[$row][$linkPos[$i]] = $v;
-		}
-		if ($k == "comment"){
-			$links[$row][$commentPos] = $v;
+		if (array_key_exists($k, $C)){
+			$links[$row][$C[$k]] = $v;
 		}
 	}
 	saveCsv("$dataFolder/links.csv", $links);
@@ -95,23 +86,6 @@ unlock();	//	保存が済んだのでロック終了
 &nbsp; &nbsp; &nbsp;
 ホストキー: <strong><?php printf("%06d", $presen["host_key"]);?></strong>
 <p>
-同室を3日間使いますので、他の発表者が使用中で使えない場合もあります。会期前は
-<?php
-$roomCol = getPosFromKey("room", $presens);
-$pidCol = getPosFromKey("pid", $presens);
-$join_urlCol = getPosFromKey("join_url", $presens);
-foreach($presens as $pr){
-	if ($pr[$roomCol] == $presen["room"]){
-		if( strncmp($pr[$pidCol], "1", 1) == 0) break;;
-	}
-}
-?>
-<a href="<?php echo $pr[$join_urlCol] ?>" target="zoom">9日の発表用の<?php echo $pr[$roomCol]?>室</a>でテストしてください。こちらは今から9日の発表まで試すことができます。<br>
-zoom会議室に入ったら、ウィンドウ下部の「参加者」、右下の「ホストの要求」をクリックし、上記のホストキーを入力してホストになってください。
-<!--
-発表時にサインインを求められたときは、
-ユーザ名 <strong><?php echo $presen["room"]?>@gs.haselab.net</strong> 、パスワード <strong>Zoom2020</strong> を用いてください。この場合、<strong>発表が終わったら、必ず https://zoom.us にサインインしたWebブラウザからアクセスし、右上の[マイアカウント]をクリック[サインアウト]をクリックでサインアウト</strong>してください。サインアウトしないと翌日の発表者の名前で聴講してしまいます。<br> -->
-困ったときは<a href="https://join.slack.com/t/i2020p/shared_invite/enQtOTgyNjUwMDE4MDIxLWQ5YTU5MzFiMzUzNDAwYzVhMGIzMGVjOTZkMzY3ZTljMGVjZDEyNGUxZmIxMDUwYjk0MTlhYTFhNGIwN2E1ZmE" target="slack">発表サポートSlack</a>でご質問ください。
 
 <h2>コメント、リンク先更新フォーム</h2>
 聴講者は、<a href="https://sites.google.com/view/i20202xr7fkr" target="attendee_page">参加登録者向けページ</a>からリンクされている聴講者向けプログラム」(<a href="show.php?day=1" target="prog">9日</a>、<a href="show.php?day=2" target="prog">10日</a>、<a href="show.php?day=3" target="prog">11日</a>)と<a href="https://www.interaction-ipsj.org/2020/online/int2Xr7fkR/rooms.php" target="realtimelist">リアルタイムの会議室一覧</a>を見ながら会議室に入ります。
@@ -131,19 +105,19 @@ if ($update){
 	echo '<br>';
 }
 ?>
-以下では<strong>半角の " </strong>は使えません。<strong>全角の ” </strong>をお使いください。<br>
+
 <form enctype="multipart/form-data" method="POST" action="<?php echo $url;?>">
 <?php
 	echo 'コメント：' . '<input type="text" name="comment" ';
 	if (!(array_search("comment", $errors)===FALSE)){ echo 'class="error" '; }
-	echo 'size="40" value="' . $link[$commentPos] . '"><br>';
+	echo 'size="40" value="' . htmlspecialchars($link[$C["comment"]]) . '"><br>';
 	for($i=0; $i<10; ++$i){
 		echo '表示名'. ($i+1) . '：<input type="text" name="'. "disp$i" .'" ';
 		if (!(array_search("disp$i", $errors)===FALSE)){ echo 'class="error" '; }
-		echo 'size="2" value="' . $link[$dispPos[$i]] . '">';
+		echo 'size="2" value="' . addslashes($link[$C["disp$i"]]) . '">';
 		echo 'リンク先URL'. ($i+1) . '：<input type="text" name="'. "link$i" .'" ';
 		if (!(array_search("link$i", $errors)===FALSE)){ echo 'class="error" '; }
-		echo 'size="20" value="' . $link[$linkPos[$i]] . '"><br>';
+		echo 'size="20" value="' . $link[$C["link$i"]] . '"><br>';
 	}
 ?>
 <input type=submit name="update" value="  上書き更新  "><br>
